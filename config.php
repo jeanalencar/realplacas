@@ -1,5 +1,12 @@
 <?php
 // config.php - Configurações do sistema
+
+// Prevent direct access
+if (basename($_SERVER['PHP_SELF']) == basename(__FILE__)) {
+    header('HTTP/1.0 403 Forbidden');
+    exit('Forbidden');
+}
+
 return [
     'email' => [
         'destinatario' => 'contato@realplacas.com',

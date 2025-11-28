@@ -15,25 +15,38 @@ if (empty($_POST['nome']) || empty($_POST['telefone'])) {
     die("Campos obrigatórios não preenchidos");
 }
 
+// Função para limpar dados de entrada
+function clean_input($data) {
+    $data = trim($data);
+    $data = stripslashes($data);
+    $data = htmlspecialchars($data);
+    return $data;
+}
+
 // Sanitizar dados
-$nome = filter_var($_POST['nome'], FILTER_SANITIZE_STRING);
-$telefone = filter_var($_POST['telefone'], FILTER_SANITIZE_STRING);
-$email = filter_var($_POST['email'], FILTER_SANITIZE_EMAIL);
-$endereco = filter_var($_POST['endereco'], FILTER_SANITIZE_STRING);
-$mensagem = filter_var($_POST['mensagem'], FILTER_SANITIZE_STRING);
+$nome = clean_input($_POST['nome']);
+$telefone = clean_input($_POST['telefone']);
+$email = isset($_POST['email']) ? clean_input($_POST['email']) : '';
+$endereco = isset($_POST['endereco']) ? clean_input($_POST['endereco']) : '';
+$mensagem = isset($_POST['mensagem']) ? clean_input($_POST['mensagem']) : '';
+
+// Proteção contra Header Injection no email
+if (!empty($email)) {
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        http_response_code(400);
+        die("E-mail inválido");
+    }
+    // Verificar se há quebras de linha (tentativa de injeção de cabeçalho)
+    if (preg_match( "/[\r\n]/", $email)) {
+        http_response_code(400);
+        die("Tentativa de injeção de cabeçalho detectada");
+    }
+}
 
 // Processar serviços selecionados
 $servicos = [];
 if (isset($_POST['servicos']) && is_array($_POST['servicos'])) {
-    $servicos = array_map(function($servico) {
-        return filter_var($servico, FILTER_SANITIZE_STRING);
-    }, $_POST['servicos']);
-}
-
-// Validar e-mail se fornecido
-if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    http_response_code(400);
-    die("E-mail inválido");
+    $servicos = array_map('clean_input', $_POST['servicos']);
 }
 
 // Construir o corpo do e-mail
@@ -66,10 +79,12 @@ IP: " . ($_SERVER['REMOTE_ADDR'] ?? 'Não disponível') . "
 $headers = "From: site@realplacas.com\r\n";
 $headers .= "Reply-To: " . ($email ?: "contato@realplacas.com") . "\r\n";
 $headers .= "Content-Type: text/plain; charset=utf-8\r\n";
+$headers .= "X-Mailer: PHP/" . phpversion();
 
 // Tentar enviar o e-mail
 try {
-    $envioEmail = mail($destinatario, $assunto, $corpoEmail, $headers);
+    // Suppress warning for mail() if not configured locally
+    $envioEmail = @mail($destinatario, $assunto, $corpoEmail, $headers);
     
     if ($envioEmail) {
         // Também enviar para WhatsApp (opcional - via webhook)
@@ -79,7 +94,9 @@ try {
         http_response_code(200);
         echo "Mensagem enviada com sucesso!";
     } else {
-        throw new Exception("Falha no envio do e-mail");
+        // Log do erro real (não mostrar ao usuário)
+        error_log("Falha ao enviar e-mail via mail(). Verifique configurações do servidor.");
+        throw new Exception("Falha no envio do e-mail. Tente contato via WhatsApp.");
     }
     
 } catch (Exception $e) {
@@ -106,38 +123,5 @@ function enviarParaWhatsApp($nome, $telefone, $servicos) {
     // Aqui você pode integrar com uma API de WhatsApp real
     // Por enquanto, apenas registramos no log
     error_log("Notificação WhatsApp: $urlWhatsApp");
-}
-
-// Função para salvar no banco de dados (opcional)
-function salvarNoBanco($dados) {
-    // Exemplo de conexão com MySQL
-    /*
-    $servername = "localhost";
-    $username = "usuario";
-    $password = "senha";
-    $dbname = "real_placas";
-    
-    try {
-        $conn = new PDO("mysql:host=$servername;dbname=$dbname", $username, $password);
-        $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        
-        $stmt = $conn->prepare("INSERT INTO orcamentos 
-            (nome, telefone, email, endereco, servicos, mensagem, data_criacao) 
-            VALUES (?, ?, ?, ?, ?, ?, NOW())");
-        
-        $servicosJson = json_encode($dados['servicos']);
-        $stmt->execute([
-            $dados['nome'],
-            $dados['telefone'],
-            $dados['email'],
-            $dados['endereco'],
-            $servicosJson,
-            $dados['mensagem']
-        ]);
-        
-    } catch(PDOException $e) {
-        error_log("Erro ao salvar no banco: " . $e->getMessage());
-    }
-    */
 }
 ?>
