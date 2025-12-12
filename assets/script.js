@@ -172,67 +172,57 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // Adicionar evento de submit
-    form.addEventListener('submit', async function (event) {
+    form.addEventListener('submit', function (event) {
         event.preventDefault();
 
-        // Resetar mensagens
-        if (successMessage) successMessage.classList.add('d-none');
-        if (errorMessage) errorMessage.classList.add('d-none');
-
-        // Verificar honeypot (proteção contra spam)
-        if (honeypot && honeypot.value !== '') {
-            console.log('Spam detectado');
-            return;
-        }
-
+        // Check validity
         if (!form.checkValidity()) {
             event.stopPropagation();
             form.classList.add('was-validated');
             return;
         }
 
-        // Mostrar loading
-        if (submitButton) submitButton.disabled = true;
-        if (loadingSpinner) loadingSpinner.classList.remove('d-none');
-
-        try {
-            // Coletar dados do formulário
-            const formData = new FormData(form);
-
-            // Enviar dados via Fetch API
-            const response = await fetch(form.action, {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'Accept': 'application/json'
-                }
-            });
-
-            if (response.ok) {
-                // Sucesso
-                if (successMessage) {
-                    successMessage.classList.remove('d-none');
-                    successMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-                form.reset();
-                form.classList.remove('was-validated');
-            } else {
-                // Erro do servidor
-                throw new Error('Erro no servidor');
-            }
-
-        } catch (error) {
-            // Erro de rede ou do servidor
-            console.error('Erro ao enviar formulário:', error);
-            if (errorMessage) {
-                errorMessage.classList.remove('d-none');
-                errorMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-        } finally {
-            // Esconder loading e reativar botão
-            if (submitButton) submitButton.disabled = false;
-            if (loadingSpinner) loadingSpinner.classList.add('d-none');
+        // Verificar honeypot
+        if (honeypot && honeypot.value !== '') {
+            return;
         }
+
+        // Coletar dados
+        const formData = new FormData(form);
+        const nome = formData.get('nome');
+        const telefone = formData.get('telefone');
+        const email = formData.get('email') || 'Não informado';
+        const endereco = formData.get('endereco') || 'Não informado';
+        const mensagem = formData.get('mensagem') || '';
+
+        // Coletar serviços selecionados
+        const servicos = [];
+        form.querySelectorAll('input[name="servicos[]"]:checked').forEach(checkbox => {
+            servicos.push(checkbox.value);
+        });
+        const servicosTexto = servicos.length > 0 ? servicos.join(', ') : 'Nenhum específico';
+
+        // Montar mensagem para o WhatsApp
+        const text = `*Nova Solicitação de Orçamento*\n\n` +
+            `*Nome:* ${nome}\n` +
+            `*Telefone:* ${telefone}\n` +
+            `*Email:* ${email}\n` +
+            `*Endereço:* ${endereco}\n\n` +
+            `*Serviços de Interesse:*\n${servicosTexto}\n\n` +
+            `*Mensagem:*\n${mensagem}`;
+
+        // Codificar para URL
+        const encodedText = encodeURIComponent(text);
+        const whatsappUrl = `https://wa.me/558798000202?text=${encodedText}`;
+
+        // Abrir WhatsApp
+        window.open(whatsappUrl, '_blank');
+
+        // Feedback visual simples (opcional, já que abre nova aba)
+        // if (successMessage) {
+        //     successMessage.classList.remove('d-none');
+        //     successMessage.innerHTML = '<strong>Redirecionando para o WhatsApp...</strong>';
+        // }
     }, false);
 
     // Validação em tempo real para melhor UX
